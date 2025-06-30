@@ -81,3 +81,59 @@ WHERE (referee_id IS NULL OR referee_id != 2);
 SELECT name, population, area 
 FROM World 
 WHERE (area >= 3000000 OR population >= 25000000);
+
+-- Retrieve classes with at least 5 students
+SELECT class 
+FROM Courses 
+GROUP BY class 
+HAVING COUNT(student) >= 5;
+
+-- Retrieve salesperson names who have not worked with companies named "RED"
+SELECT name 
+FROM SalesPerson 
+WHERE name NOT IN (
+    SELECT SBQ.SP_name 
+    FROM (
+        SELECT SP.name AS SP_name, C.name AS C_name
+        FROM SalesPerson SP 
+        LEFT JOIN Orders O ON SP.sales_id = O.sales_id 
+        LEFT JOIN Company C ON C.com_id = O.com_id 
+    ) SBQ 
+    WHERE SBQ.C_name LIKE "RED"
+);
+
+-- Determine if three sides form a triangle
+SELECT 
+  x, y, z,
+  CASE 
+    WHEN ((x + y > z) AND (y + z > x) AND (z + x > y)) THEN "Yes"
+    ELSE "No"
+  END AS triangle
+FROM Triangle;
+
+-- Retrieve the maximum unique number from MyNumbers
+SELECT MAX(num) AS num 
+FROM MyNumbers 
+WHERE num NOT IN (
+    SELECT num 
+    FROM (
+        SELECT num, 
+        ROW_NUMBER() OVER (PARTITION BY num ORDER BY num) AS rn
+        FROM MyNumbers
+    ) AS SBQ
+    WHERE SBQ.rn = 2
+);
+
+-- Retrieve non-boring movies with odd IDs, sorted by rating in descending order
+SELECT * 
+FROM Cinema 
+WHERE id % 2 != 0 AND description NOT LIKE "%boring%" 
+ORDER BY rating DESC;
+
+-- Swap the values of the "sex" column in the salary table
+UPDATE salary
+SET sex =
+  CASE 
+    WHEN sex = "f" THEN "m"
+    ELSE "f"
+  END;
