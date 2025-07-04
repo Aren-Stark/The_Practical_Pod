@@ -236,3 +236,119 @@ SELECT sell_date, COUNT(distinct product) AS num_sold,
 GROUP_CONCAT(distinct product ORDER BY product) AS products
 FROM Activities
 GROUP BY sell_date;
+
+-- Get users with valid leetcode.com emails
+SELECT user_id, name, mail
+FROM Users
+WHERE mail REGEXP '^[A-Za-z][A-Za-z0-9_.-]*@leetcode\.com$'
+and mail like '%@leetcode.com'
+
+-- Get patients with DIAB1 in their conditions
+select patient_id, patient_name, conditions from Patients
+where conditions like "% DIAB1%" or conditions like "DIAB1%"
+
+-- Get user names and balances over 10,000
+select U.name, sum(T.amount) as balance from Users U JOIN Transactions T
+ON U.account=T.account
+group by U.account
+having (sum(T.amount)) > 10000
+
+-- Get contest registration percentage per contest
+select R.contest_id, 
+round(100*(count(*))/(SELECT COUNT(DISTINCT user_id) FROM Users),2) as percentage
+from Users U JOIN Register R
+ON R.user_id=U.user_id
+group by R.contest_id
+order by percentage desc, contest_id asc
+
+-- Get average processing time per machine
+select machine_id, round(sum(SBQ.end_time-SBQ.start_time)/count(SBQ.process_id),3) as processing_time
+from (
+select A.machine_id, A.timestamp as start_time, B.timestamp as end_time, A.process_id from Activity A JOIN Activity B ON A.machine_id=B.machine_id and A.process_id=B.process_id and A.activity_type = "start" and B.activity_type = "end" order by A.machine_id, A.process_id, A.timestamp
+) SBQ
+group by SBQ.machine_id
+
+-- Capitalize first letter of user names
+SELECT user_id, CONCAT(
+    UPPER(SUBSTRING(name, 1, 1)), 
+    LOWER(SUBSTRING(name, 2))
+) AS name
+FROM Users
+order by user_id;
+
+-- Get tweet IDs with content longer than 15 characters
+select tweet_id from Tweets
+where length(content)>15
+
+-- Get unique leads and partners per day and make
+select date_id, make_name, count(distinct(lead_id)) as unique_leads, count(distinct(partner_id)) as unique_partners
+from DailySales group by date_id, make_name
+
+-- Get follower count per user
+select user_id, count(follower_id) as followers_count from Followers
+group by user_id order by user_id
+
+-- Get report count and average age for each employee's reports
+select A.employee_id, A.name, count(B.name) as reports_count, round(avg(B.age)) as average_age 
+from Employees A, Employees B 
+where A.employee_id=B.reports_to
+group by A.employee_id 
+order by A.employee_id
+
+-- Get total work time per employee per day
+select event_day as day, emp_id, sum(out_time-in_time) as total_time from Employees group by event_day, emp_id order by total_time, event_day,emp_id
+
+-- Get product IDs that are low fat and recyclable
+select product_id from Products where low_fats='Y' and recyclable='Y'
+
+-- Get employees with primary department or only one department
+(select employee_id, department_id from employee where primary_flag="Y")
+UNION
+(select employee_id, department_id from employee group by employee_id having count(department_id)=1 )
+
+-- Unpivot product prices by store
+select * from
+(
+select product_id, "store1" as store, store1 as price from Products
+union 
+select product_id, "store2" as store, store2 as price from Products
+union 
+select product_id, "store3" as store, store3 as price from Products
+) SBQ
+where SBQ.price is not null
+order by SBQ.product_id
+
+-- Get employee bonus if odd ID and name doesn't start with 'M'
+select employee_id, case
+when
+employee_id%2!=0 and name not like "M%" then salary
+else
+0
+end as bonus
+from Employees
+order by employee_id
+
+-- Get last login timestamp in 2020 per user
+select user_id, max(time_stamp) as last_stamp
+from Logins
+where time_stamp like "%2020%"
+group by user_id
+
+-- Get account count by salary category
+select * from (
+select "Low Salary" as category, count(account_id) as accounts_count from Accounts where income<20000
+union
+select "Average Salary" as category, count(account_id) as accounts_count from Accounts where income>=20000 and income<=50000
+union
+select "High Salary" as category, count(account_id) as accounts_count from Accounts where income>50000
+) SBQ
+order by SBQ.accounts_count desc
+
+-- Get confirmation rate per user
+SELECT s.user_id, round(IFNULL(sum(case when action = 'confirmed' then 1 else null end)* 1.0 /
+count(action), 0),2) as confirmation_rate
+from Signups s
+left join Confirmations C
+on s.user_id = C.user_id
+group by s.user_id
+order by confirmation_rate
