@@ -1,5 +1,4 @@
 -- Retrieve first name, last name, city, and state by joining Person and Address tables
--- Retrieve first name, last name, city, and state by joining Person and Address tables
 SELECT firstName, lastName, city, state
 FROM Person
 LEFT JOIN Address 
@@ -352,3 +351,50 @@ left join Confirmations C
 on s.user_id = C.user_id
 group by s.user_id
 order by confirmation_rate
+
+-- Retrieves a list of active users who have logged in within the last 30 days, ordered by their last login date descending.
+select employee_id from employees where employee_id not in (select employee_id from salaries )
+union
+select employee_id from salaries where employee_id not in (select employee_id from employees)
+order by employee_id;
+
+-- Finds employees with salary < 30,000 whose manager_id is not null and does not exist in Employees table.
+SELECT employee_id 
+FROM Employees 
+WHERE salary < 30000 
+  AND manager_id IS NOT NULL 
+  AND manager_id NOT IN (SELECT employee_id FROM Employees)
+ORDER BY employee_id;
+
+-- Counts the number of distinct subjects each teacher teaches.
+select teacher_id, count(distinct(subject_id)) as cnt from Teacher
+group by teacher_id
+order by teacher_id, subject_id
+
+-- Counts customers who visited but did not make any transactions.
+select V.customer_id,
+count(*) as count_no_trans 
+from Visits V LEFT JOIN Transactions T ON V.visit_id=T.visit_id where T.visit_id is null
+group by V.customer_id
+
+-- Finds the second highest salary from the Employee table.
+select max(salary) as SecondHighestSalary from Employee where salary not in (select max(salary) from Employee)
+
+-- Returns the Nth highest salary using a user-defined function.
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+  RETURN (
+      # Write your MySQL query statement below.
+#select Salary from Employee e1 where N-1=(select count(distinct(Salary)) from Employee e2 where e1.Salary < e2.salary) LIMIT 1
+SELECT DISTINCT salary
+      FROM (
+          SELECT salary, 
+                 DENSE_RANK() OVER (ORDER BY salary DESC) as rank_num
+          FROM Employee
+      ) ranked
+      WHERE rank_num = N
+  );
+END
+
+-- Ranks scores in descending order using DENSE_RANK.
+SELECT score, DENSE_RANK() OVER (ORDER BY score DESC) as "rank" FROM Scores
