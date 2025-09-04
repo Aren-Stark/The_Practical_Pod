@@ -398,3 +398,196 @@ END
 
 -- Ranks scores in descending order using DENSE_RANK.
 SELECT score, DENSE_RANK() OVER (ORDER BY score DESC) as "rank" FROM Scores
+
+SELECT D.Name as Department, E.Name as Employee, Salary FROM Employee E inner join Department D on E.DepartmentId = D.Id WHERE (DepartmentId,Salary) in(SELECT DepartmentId, MAX(Salary) FROM Employee group by DepartmentId)
+
+WITH RankedEmployees AS (
+  SELECT 
+    E.Name AS Employee,
+    E.Salary,
+    E.DepartmentId,
+    D.Name AS Department,
+    dense_rank() OVER (PARTITION BY E.DepartmentId ORDER BY E.Salary DESC) AS row_num
+  FROM Employee E
+  INNER JOIN Department D ON E.DepartmentId = D.Id
+)
+SELECT Department, Employee, Salary
+FROM RankedEmployees
+WHERE row_num <= 3;
+
+-- Calculates daily cancellation rate for trips excluding banned users.
+select
+Request_at as Day,
+round(sum(Status in ('cancelled_by_driver', 'cancelled_by_client'))/count(*),2) as 'Cancellation Rate'
+from Trips
+where
+Client_Id not in (select Users_Id from Users where Banned ='Yes' and Role = 'client') and
+Driver_Id not in (select Users_Id from Users where Banned ='Yes' and Role = 'driver') and
+Request_at between '2013-10-01' and '2013-10-03'
+group by Request_at
+;
+
+-- Calculates fraction of players who logged in the day after their first login.
+WITH new as(SELECT player_id, event_date, MIN(event_date) as first_date
+FROM Activity
+GROUP BY player_id)
+SELECT ROUND(COALESCE(SUM(CASE WHEN DATEDIFF(a.event_date, n.first_date) = 1 THEN 1 END) / COUNT(DISTINCT a.player_id), 0), 2) as fraction
+FROM Activity a
+JOIN new n
+ON a.player_id = n.player_id;
+
+-- Gets names of managers who have at least 5 direct reports.
+SELECT e.name
+FROM Employee e
+JOIN (
+SELECT managerId
+FROM Employee
+WHERE managerId IS NOT NULL
+GROUP BY managerId
+HAVING COUNT(*) >= 5
+) m ON e.id = m.managerId;
+
+-- Finds consecutive stadium visits with at least 3 days and 100+ people.
+with consequtive as
+(select *, id - row_number() over (order by visit_date) as ind
+from Stadium
+where people >= 100)
+select b.id, b.visit_date, b.people
+from consequtive b
+where b.ind in
+(select a.ind
+from consequtive a
+group by 1
+having count(1) >= 3)
+
+-- Classifies tree nodes as Root, Inner, or Leaf.
+SELECT 
+    ID, 
+    CASE
+        WHEN p_id IS NULL THEN 'Root'
+        WHEN ID IN (SELECT p_id FROM tree) THEN 'Inner'
+        ELSE 'Leaf'
+    END AS type 
+FROM tree 
+ORDER BY ID;
+
+-- Swaps students in seat table based on odd/even id.
+select id, coalesce(case when id%2 != 0 then lead(student) over(order by id) else lag(student) over(order by id)end, student) as student
+from Seat;
+
+-- Finds customers who bought all products.
+SELECT 
+    subq1.customer_id 
+FROM (
+    SELECT 
+        C.customer_id, 
+        COUNT(DISTINCT P.product_key) AS product_count
+    FROM Customer C 
+    JOIN Product P ON C.product_key = P.product_key
+    GROUP BY C.customer_id
+) subq1
+WHERE subq1.product_count = (SELECT COUNT(DISTINCT product_key) FROM Product);
+
+-- Gets first year, quantity, and price for each product.
+SELECT product_id, year as first_year, quantity, price
+FROM (
+SELECT *,
+rank() OVER (PARTITION BY product_id ORDER BY year) AS r
+FROM Sales
+)t
+WHERE r = 1;
+
+-- Gets user order count in 2019 and join date.
+SELECT 
+    u.user_id AS buyer_id,
+    u.join_date,
+    COUNT(o.order_id) AS orders_in_2019
+FROM users u
+LEFT JOIN orders o 
+    ON u.user_id = o.buyer_id 
+    AND o.order_date BETWEEN '2019-01-01' AND '2019-12-31'
+GROUP BY u.user_id, u.join_date
+ORDER BY u.user_id;
+
+-- Gets product price as of 2019-08-16 or sets to 10 if changed after.
+(select SBQ.product_id, 
+case when SBQ.change_date<='2019-08-16' then new_price
+else 10
+end as price
+from (
+select *,
+row_number() over (partition by product_id order by change_date desc) as row_num
+from Products where change_date <= '2019-08-16'
+) SBQ where SBQ.row_num=1
+) union (
+SELECT DISTINCT product_id, 10 as price
+FROM Products
+GROUP BY product_id
+HAVING MIN(change_date) >= '2019-08-17'
+)
+
+-- Calculates percentage of first orders delivered on preferred date.
+SELECT 
+    ROUND(
+        SUM(CASE WHEN order_date = customer_pref_delivery_date THEN 1 ELSE 0 END) 
+        / COUNT(*) * 100, 2
+    ) AS immediate_percentage
+FROM (
+    SELECT 
+        customer_id, 
+        order_date, 
+        customer_pref_delivery_date
+    FROM Delivery
+    WHERE (customer_id, order_date) IN (
+        SELECT 
+            customer_id, 
+            MIN(order_date) AS first_order_date
+        FROM Delivery
+        GROUP BY customer_id
+    )
+) AS first_orders;
+
+-- Aggregates monthly transaction stats by country.
+SELECT 
+    DATE_FORMAT(trans_date, '%Y-%m') AS month,
+    country,
+    COUNT(*) AS trans_count,
+    SUM(CASE WHEN state = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+    SUM(amount) AS trans_total_amount,
+    SUM(CASE WHEN state = 'approved' THEN amount ELSE 0 END) AS approved_total_amount
+FROM Transactions
+GROUP BY month, country
+ORDER BY month, country;
+
+-- Gets last person who can board without exceeding 1000 weight.
+SELECT person_name
+FROM (
+    SELECT 
+        person_name,
+        SUM(weight) OVER (ORDER BY turn) AS cumulative_weight,
+        turn
+    FROM Queue
+) AS boarded
+WHERE cumulative_weight <= 1000
+ORDER BY turn DESC
+LIMIT 1;
+
+SELECT 
+    calendar.visited_on,
+    SUM(daily.amount) AS amount,
+    ROUND(SUM(daily.amount) / 7, 2) AS average_amount
+FROM (
+    SELECT 
+        visited_on,
+        SUM(amount) AS amount
+    FROM Customer
+    GROUP BY visited_on
+) AS daily
+JOIN (
+    SELECT DISTINCT visited_on
+    FROM Customer
+) AS calendar
+ON daily.visited_on BETWEEN DATE_SUB(calendar.visited_on, INTERVAL 6 DAY) AND calendar.visited_on
+GROUP BY calendar.visited_on
+HAVING COUNT(DISTINCT daily.visited_on) = 7
+ORDER BY calendar.visited_on;
